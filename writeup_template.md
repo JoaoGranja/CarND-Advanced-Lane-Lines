@@ -21,7 +21,7 @@ The goals / steps of this project are the following:
 [image3]: ./output_images/test_images/binary_straight_lines1.jpg "Binary Example"
 [image4]: ./output_images/test_images/undistorted_straight_lines1.jpg "Warp Example"
 [image5]: ./examples/color_fit_lines.jpg "Fit Visual"
-[image6]: ./examples/example_output.jpg "Output"
+[image6]: ./output_images/test_images/pipeline_result_straight_lines1.jpg"Output"
 [video1]: ./project_video.mp4 "Video"
 
 ## Approach
@@ -128,19 +128,56 @@ After getting the left and right line pixel positions, in function `fit_polynomi
 
 #### E. Determine the curvature of the lane and vehicle position with respect to center.
 
-I did this in lines # through # in my code in `my_other_file.py`
+After detecting the left and right lanes and fit a second order polynomial to each, I determine the curvature of the lane on function `measure_curvature_real` where I first convert the polynomial coefficients in pixel units to meter using the conversions:
+ym_per_pix = 30/720 # meters per pixel in y dimension
+xm_per_pix = 3.7/600 # meters per pixel in x dimension
 
-#### F. Provide an example image of your result plotted back down onto the road such that the lane area is identified clearly.
+and the formulas: a_m = a_p*(xm_per_pix/ym_per_pix**2); b_m = b_p * (xm_per_pix/ym_per_pix)
 
-I implemented this step in lines # through # in my code in `yet_another_file.py` in the function `map_lane()`.  Here is an example of my result on a test image:
+After that I average the two polynomial coefficients and calculate the curvature of the lane as:
+R = ((1 + (2*a*y*ym_per_pix + b)**2)**(3/2))/(np.abs(2*a))
+
+The vehicle position with respect to center of the lane is calculated on function `measure_rel_vehicle_position` where are calculated the x_position of the lane lines at the bottom of the image. 
+
+The the center of the lane is determined as the point in the middle of that two x_position points and the vehicle position is on the midle of the image width. The relative position is then calculated as the diference of that two values. 
+
+The conversion to meter unit is also done using the conversion xm_per_pix.
+
+**Results obtained**:
+
+The curvature values for the test images were calculated around 700 - 1200 m, except for the straight lines were the curvature values were much higher > 7000 m.
+
+The vehicle position for the test images were calculated around 0.04m to 0.35m
+
+#### F. Warp the detected lane boundaries back onto the original image.
+
+With the lane boundaries detected, it is created a binary image to draw the lane lines for output display. But first it is necessary to create the lane lines and then warp back to the original image space. So the next steps are done:
+* Create an image to draw the lines on
+* Recast the x and y points into usable format for `cv2.fillPoly`
+* Draw the lanes onto the warped blank image
+* Warp the blank back to original image space using inverse perspective matrix (Minv) with the function `cv2.warpPerspective`
+
+#### G. Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position..
+
+To display the original image with the lane boundaries and numerical estimation of lane curvature and vehicle position, it is necessary to combine the unwarped binary image defined on previous step (F) with the original image. This combination is done using the function `cv2.addWeighted`.
+
+After that two texts are added on function `save_pipeline_image`. These two text have the information about numerical estimation of lane curvature and vehicle position.
+
+
+#### Result of the Lane finding Pipeline
+
+I implemented this pipeline in the 6th code cell of the IPython notebook located in "main.ipynb" though the function `process_image`. This function is called for all test images on 7th code cell of the IPython notebook located in "main.ipynb" and the results are stored on folder `/output_images/test_images`. 
+An example of pipeline result on a test image is:
 
 ![alt text][image6]
 
 ---
 
-### Pipeline (video)
+### 3. Build a Lane finding Pipeline to a video
 
-#### 1. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (wobbly lines are ok but no catastrophic failures that would cause the car to drive off the road!).
+
+
+#### A. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (wobbly lines are ok but no catastrophic failures that would cause the car to drive off the road!).
 
 Here's a [link to my video result](./project_video.mp4)
 
