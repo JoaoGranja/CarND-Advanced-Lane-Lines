@@ -92,9 +92,11 @@ def hls_select(img, s_thresh=(170, 255), v_thresh=(230, 255)):
     # 2) Apply a threshold to the V channel
     v_binary_output = np.zeros_like(v)
     v_binary_output[(v >= v_thresh[0]) & (v <= v_thresh[1])] = 1
+
     
     binary_output = np.zeros_like(s)
     binary_output[(s_binary_output == 1) | (v_binary_output == 1)] = 1
+    
     return binary_output
 
 def find_lane_pixels(binary_warped):

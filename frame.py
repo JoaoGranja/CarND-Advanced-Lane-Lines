@@ -3,12 +3,14 @@ import cv2
 import matplotlib.pyplot as plt
 from helper_functions import *
 from line import *
-#from scipy.signal import find_peaks
 
 # Define conversions in x and y from pixels space to meters
 ym_per_pix = 30/720 # meters per pixel in y dimension
 xm_per_pix = 3.7/600 # meters per pixel in x dimension
 horizontal_distance = 600 #pixels
+
+# TO DELETE
+out_img = None
 
 # Define a class to process each frame of a video
 class Frame():
@@ -35,7 +37,10 @@ class Frame():
         # Flag to indicate if first_fit_polynomial shall be called for each line.
         self.search_starting_points = True
         
+        self.count = 0 ###########   TO DELETE
+        
     def __call__(self, frame):
+        self.count += 1 ###########   TO DELETE
         
         ## 1 - Apply a distortion correction to the image ##
         undist = undistort_image(frame, self.mtx, self.dist)
@@ -47,16 +52,24 @@ class Frame():
         gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(30, 200))
 
         # Apply each of the color thresholding functions
-        colors_binary = hls_select(undist, s_thresh=(200, 255), v_thresh=(230, 255))
+        colors_binary = hls_select(undist, s_thresh=(170, 255), v_thresh=(170, 255))
 
         # Combine all of the thresholding binaries
         binary_image = np.zeros_like(gradx)
         binary_image[(colors_binary == 1) | (gradx == 1) ] = 1
+        binary_image = colors_binary
+        
         
         # 3 - Apply a perspective transform to rectify binary image ("birds-eye view") ##
 
         # Warp the image to a top-down view
         binary_warped = cv2.warpPerspective(binary_image, self.M, (self.img_size[1],self.img_size[0]) , flags=cv2.INTER_LINEAR)
+        
+        if self.count % 2 == 0:
+            save_warped_images("output_images/test_images/challenge", "binary" + str(self.count), binary_warped,cv2.warpPerspective(undist, self.M, (self.img_size[1],self.img_size[0]) , flags=cv2.INTER_LINEAR))
+            
+        # TO DELETE
+        out_img = np.dstack((binary_warped, binary_warped, binary_warped))
         
         ## 4 - Detect lane pixels and fit to find the lane boundary ##
 
@@ -64,13 +77,16 @@ class Frame():
         if self.search_starting_points:
             leftx_base, rightx_base = self.find_base_lanes_position(binary_warped)
             
-            self.left_line.first_fit_polynomial(binary_warped, leftx_base)
-            self.right_line.first_fit_polynomial(binary_warped, rightx_base)
+            self.left_line.first_fit_polynomial(binary_warped, leftx_base,out_img)
+            self.right_line.first_fit_polynomial(binary_warped, rightx_base,out_img)
             
             self.search_starting_points = False
         else:
-            self.left_line.search_around_poly(binary_warped)
-            self.right_line.search_around_poly(binary_warped)
+            self.left_line.search_around_poly(binary_warped,out_img)
+            self.right_line.search_around_poly(binary_warped,out_img)
+            
+        if self.count % 2 == 0:
+            save_lane_lines_image("output_images/test_images/challenge", "challenge" + str(self.count) , out_img)
 
         ## 5 - Determine the curvature of the lane and vehicle position with respect to center ##
 
@@ -83,9 +99,10 @@ class Frame():
         self.line_base_pos = measure_rel_vehicle_position(self.img_size, self.left_line.best_fit, self.right_line.best_fit)
              
         ## Sanity Check ##
-        # A - Checking that they have similar curvature       
-        if not 0.5 <(self.left_line.radius_of_curvature / self.right_line.radius_of_curvature)< 2:
-            print("error 1", self.right_line.radius_of_curvature,  self.left_line.radius_of_curvature)
+        # A - Checking that they have similar curvature  
+        if self.radius_of_curvature < 2000:
+            if not 0.5 <(self.left_line.radius_of_curvature / self.right_line.radius_of_curvature)< 2:
+                print("error 1", self.right_line.radius_of_curvature,  self.left_line.radius_of_curvature)
         
         # B - Checking that they are separated by approximately the right distance horizontally
         distance = (self.right_line.bestx[self.img_size[0]-1] - self.left_line.bestx[self.img_size[0]-1])
@@ -99,6 +116,9 @@ class Frame():
             self.search_starting_points = True
         
         # C - Checking that they are roughly parallel
+        
+        if np.abs( self.line_base_pos) > 0.50:
+            self.search_starting_points = True
 
         ## 6 - Warp the detected lane boundaries back onto the original image ##
 

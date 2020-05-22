@@ -55,7 +55,7 @@ class Line():
         self.ally = None  
         
         
-    def find_lane_pixels(self, binary_warped, base):
+    def find_lane_pixels(self, binary_warped, base, out_img):
        
         # Set height of windows - based on nwindows above and image shape
         window_height = np.int(binary_warped.shape[0]//self.nwindows)
@@ -67,6 +67,7 @@ class Line():
 
         # Current positions to be updated later for each window in nwindows
         x_current = base
+        dx_current = []
 
         # Create empty lists to receive the lane pixel indices
         lane_inds = []
@@ -80,6 +81,10 @@ class Line():
             win_x_low = x_current - self.margin 
             win_x_high = x_current + self.margin 
 
+            # TO DELETE Draw the windows on the visualization image
+            cv2.rectangle(out_img,(win_x_low,win_y_low),
+            (win_x_high,win_y_high),(0,255,0), 2) 
+
             # Identify the nonzero pixels in x and y within the window 
             good_inds = ((nonzerox>=win_x_low) & (nonzerox<win_x_high) &
             (nonzeroy>=win_y_low) & (nonzeroy<win_y_high)).nonzero()[0]
@@ -89,7 +94,13 @@ class Line():
 
             # If > minpix pixels, recenter next window on their mean position
             if len(good_inds) > self.minpix:
-                x_current = np.int(np.mean(nonzerox[good_inds]))
+                new_x_current = np.int(np.mean(nonzerox[good_inds]))
+                dx_current.append(new_x_current - x_current)
+                x_current = new_x_current
+            else:
+                print("something", dx_current, window)
+                #if len(dx_current) > 0:
+                #s    x_current = x_current + sum(dx_current)/len(dx_current)
 
         # Concatenate the arrays of indices (previously was a list of lists of pixels)
         try:
@@ -103,7 +114,7 @@ class Line():
         self.ally = nonzeroy[lane_inds] 
 
   
-    def update_poly(self):
+    def update_poly(self, out_img):
         # Fit a second order polynomial to each using `np.polyfit'
         poly_fit = np.polyfit(self.ally, self.allx, 2 )
         
@@ -129,21 +140,29 @@ class Line():
 
         self.best_fit = np.polyfit(self.line_y, self.bestx, 2 )
         
+        # TO DELETE
+        ## Visualization ##
+        # Colors in the left and right lane regions
+        out_img[self.ally, self.allx] = [255, 0, 0]
+
+        # Plots the left and right polynomials on the lane lines
+        plt.plot(self.bestx, self.line_y, color='yellow')
+        
     
-    def first_fit_polynomial(self, binary_warped, basex):
+    def first_fit_polynomial(self, binary_warped, basex, out_img):
         # Find the lane pixels first
-        self.find_lane_pixels(binary_warped, basex)
+        self.find_lane_pixels(binary_warped, basex, out_img)
 
         # Update the polynomial
         if len(self.allx) > 0 and len(self.ally)>0:
             # update the polynomial
-            self.update_poly()
+            self.update_poly(out_img)
 
             self.detected = True
         else:
             self.detected = False
     
-    def search_around_poly(self, binary_warped):
+    def search_around_poly(self, binary_warped, out_img):
 
         # Grab activated pixels
         nonzero = binary_warped.nonzero()
@@ -165,11 +184,26 @@ class Line():
         
         if len(self.allx) > 0 and len(self.ally)>0:
             # update the polynomial
-            self.update_poly()
+            self.update_poly(out_img)
 
             self.detected = True
         else:
             self.detected = False
+            
+        ##  TO DELETE Visualization ##
+        # Create an image to draw on and an image to show the selection window
+        window_img = np.zeros_like(out_img)
+
+        # Generate a polygon to illustrate the search window area
+        # And recast the x and y points into usable format for cv2.fillPoly()
+        line_window1 = np.array([np.transpose(np.vstack([self.bestx-self.margin, self.line_y]))])
+        line_window2 = np.array([np.flipud(np.transpose(np.vstack([self.bestx+self.margin, 
+                                  self.line_y])))])
+        line_pts = np.hstack((line_window1, line_window2))
+
+        # Draw the lane onto the warped blank image
+        cv2.fillPoly(window_img, np.int_([line_pts]), (0,255, 0))
+        out_img = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
 
 
     def measure_curvature_real(self):
