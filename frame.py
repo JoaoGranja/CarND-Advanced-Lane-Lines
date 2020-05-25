@@ -14,7 +14,7 @@ out_img = None
 
 # Define a class to process each frame of a video
 class Frame():
-    def __init__(self, mtx, dist, M, M_inv, img_size):
+    def __init__(self, mtx, dist, M, M_inv, img_size, order):
         
         self.mtx = mtx
         self.dist = dist
@@ -39,6 +39,8 @@ class Frame():
         
         self.count = 0 ###########   TO DELETE
         
+        self.order_poly = order
+        
     def __call__(self, frame):
         self.count += 1 ###########   TO DELETE
         
@@ -49,52 +51,53 @@ class Frame():
         ksize = 3 # Sobel kernel size 
 
         # Apply each of the gradient thresholding functions
-        gradx = abs_sobel_thresh(undist, orient='x', sobel_kernel=ksize, thresh=(30, 200))
+        mag_binary = mag_thresh(undist, sobel_kernel=ksize, mag_thresh=(30, 200))
+        dir_binary = dir_threshold(undist, sobel_kernel=ksize, thresh=(0.7, 1.3))
 
-        # Apply each of the color thresholding functions
-        colors_binary = hls_select(undist, s_thresh=(170, 255), v_thresh=(170, 255))
+        # Apply each of the color thresholding functions for HLS color space
+        hls_colors_binary = hls_select(undist, s_thresh=(170, 250), l_thresh=(200, 255)) # l - 200
+
+        # Apply each of the color thresholding functions for HSV color space
+        hsv_colors_binary = hsv_select(undist, s_thresh=(130, 255), v_thresh=(240, 255), vs_thresh=(200, 255)) # v - 200
 
         # Combine all of the thresholding binaries
-        binary_image = np.zeros_like(gradx)
-        binary_image[(colors_binary == 1) | (gradx == 1) ] = 1
-        binary_image = colors_binary
-        
+        binary_image = np.zeros_like(mag_binary)
+        binary_image[(hsv_colors_binary == 1) | (hls_colors_binary == 1) | ((mag_binary == 1) & (dir_binary == 1)) ] = 1
+
         
         # 3 - Apply a perspective transform to rectify binary image ("birds-eye view") ##
 
         # Warp the image to a top-down view
         binary_warped = cv2.warpPerspective(binary_image, self.M, (self.img_size[1],self.img_size[0]) , flags=cv2.INTER_LINEAR)
         
-        if self.count % 2 == 0:
+        if self.count % 100 == 0:
             save_warped_images("output_images/test_images/challenge", "binary" + str(self.count), binary_warped,cv2.warpPerspective(undist, self.M, (self.img_size[1],self.img_size[0]) , flags=cv2.INTER_LINEAR))
             
         # TO DELETE
-        out_img = np.dstack((binary_warped, binary_warped, binary_warped))
+        if self.count % 100 == 0: 
+            out_img = np.dstack((binary_warped, binary_warped, binary_warped))
+        else:
+            out_img = None
         
         ## 4 - Detect lane pixels and fit to find the lane boundary ##
 
         # Create a sliding window and find out which activated pixels fall into the window
-        if self.search_starting_points:
+        if self.search_starting_points == True: # | self.left_line.detected == False | self.right_line.detected == False:
             leftx_base, rightx_base = self.find_base_lanes_position(binary_warped)
             
-            self.left_line.first_fit_polynomial(binary_warped, leftx_base,out_img)
-            self.right_line.first_fit_polynomial(binary_warped, rightx_base,out_img)
+            self.left_line.first_fit_polynomial(binary_warped, leftx_base, self.order_poly, out_img)
+            self.right_line.first_fit_polynomial(binary_warped, rightx_base, self.order_poly, out_img)
             
             self.search_starting_points = False
         else:
-            self.left_line.search_around_poly(binary_warped,out_img)
-            self.right_line.search_around_poly(binary_warped,out_img)
+            self.left_line.search_around_poly(binary_warped, self.order_poly, out_img)
+            self.right_line.search_around_poly(binary_warped, self.order_poly, out_img)
             
-        if self.count % 2 == 0:
+        if out_img is not None:
             save_lane_lines_image("output_images/test_images/challenge", "challenge" + str(self.count) , out_img)
 
         ## 5 - Determine the curvature of the lane and vehicle position with respect to center ##
-
-        self.left_line.measure_curvature_real()
-        self.right_line.measure_curvature_real()
-        #self.radius_of_curvature = np.int((self.left_line.radius_of_curvature + self.right_line.radius_of_curvature)/2)
-        
-        self.radius_of_curvature = measure_curvature_real(self.img_size[0], self.left_line.best_fit, self.right_line.best_fit)
+        self.radius_of_curvature, self.left_line.radius_of_curvature, self.right_line.radius_of_curvature = measure_curvature_real(self.img_size[0], self.left_line.best_fit, self.right_line.best_fit)
 
         self.line_base_pos = measure_rel_vehicle_position(self.img_size, self.left_line.best_fit, self.right_line.best_fit)
              
@@ -112,11 +115,25 @@ class Frame():
             
         distance = (self.right_line.bestx[0] - self.left_line.bestx[0])
         if not (0.6*horizontal_distance<distance<1.4*horizontal_distance):
-            print("error 4", distance, self.right_line.bestx[0], self.left_line.bestx[0])
+            print("error 3", distance, self.right_line.bestx[0], self.left_line.bestx[0])
             self.search_starting_points = True
         
         # C - Checking that they are roughly parallel
-        
+        min_distance = np.min(self.right_line.bestx - (self.left_line.bestx))
+        if (min_distance < 0.8*horizontal_distance):
+            print("error 4", min_distance, self.right_line.bestx[self.img_size[0]-1], self.left_line.bestx[self.img_size[0]-1])
+            self.search_starting_points = True
+                              
+        max_distance = np.max(self.right_line.bestx - (self.left_line.bestx))
+        if (max_distance > 1.25*horizontal_distance):
+            print("error 5", max_distance, self.right_line.bestx[self.img_size[0]-1], self.left_line.bestx[self.img_size[0]-1])
+            self.search_starting_points = True
+                              
+        mean_distance = np.mean(self.right_line.bestx - (self.left_line.bestx))
+        if not (0.8*horizontal_distance<mean_distance<1.25*horizontal_distance):
+            print("error 6", mean_distance, self.right_line.bestx[self.img_size[0]-1], self.left_line.bestx[self.img_size[0]-1])
+            self.search_starting_points = True
+                        
         if np.abs( self.line_base_pos) > 0.50:
             self.search_starting_points = True
 
@@ -146,11 +163,11 @@ class Frame():
         cv2.putText(result,"Radius of the Curvature = {0}m".format(self.radius_of_curvature), 
             (0, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
 
-        if self.line_base_pos < 0:
-            cv2.putText(result,"Vehicle is {0}m left of the center".format(-self.line_base_pos), 
+        if self.line_base_pos > 0:
+            cv2.putText(result,"Vehicle is {0}m left of the center".format(self.line_base_pos), 
             (0, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
         else:    
-            cv2.putText(result,"Vehicle is {0}m right of the center".format(self.line_base_pos), 
+            cv2.putText(result,"Vehicle is {0}m right of the center".format(-self.line_base_pos), 
             (0, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
             
         return result
@@ -198,15 +215,17 @@ class Frame():
         # Find peaks where distance is similar to horizontal_distance
         leftx_base, rightx_base = leftx_list[0], rightx_list[0]
         maximum_peaks = histogram[leftx_base] + histogram[rightx_base]
+        min_distance = np.abs(binary_warped.shape[1]//2 - (rightx_list[0] + leftx_list[0])/2)
         first_time = True
         
         for i in range(2):
             for j in range(2):
-                if 0.8*horizontal_distance<rightx_list[j] - leftx_list[i]<1.2*horizontal_distance:
+                if 0.95*horizontal_distance<rightx_list[j] - leftx_list[i]<1.05*horizontal_distance:
                     #print("Find peaks", rightx_list[j], leftx_list[i])
-                    if first_time | (histogram[leftx_list[i]] + histogram[rightx_list[j]]) > maximum_peaks:
+                    if first_time | (np.abs(binary_warped.shape[1]/2 - (rightx_list[j] + leftx_list[i])/2) < min_distance ) :
                         leftx_base, rightx_base = leftx_list[i], rightx_list[j]
                         maximum_peaks = histogram[leftx_base] + histogram[rightx_base]
+                        min_distance = np.abs(binary_warped.shape[1]//2 - (rightx_list[j] + leftx_list[i])/2)
                         first_time = False
         
         #print("returned peaks", leftx_base, rightx_base, maximum_peaks)
