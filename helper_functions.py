@@ -13,7 +13,7 @@ def undistort_image(image, mtx, dist):
     return  undist
 
 
-## Create a thresholded binary image functions "
+## Thresholded binary image functions ##
 def abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(0, 255)):
     """Create a thresholded binary image based on directional gradient"""
     # Calculate directional gradient
@@ -85,63 +85,53 @@ def hls_select(img, l_thresh=(170, 255), s_thresh=(170, 255)):
     l = hls[:,:,1]
     s = hls[:,:,2]
     
-    # 3) Apply a threshold to the S channel
+    # 2) Apply a threshold to the S channel
     s_binary_output = np.zeros_like(s)
     s_binary_output[(s >= s_thresh[0]) & (s <= s_thresh[1])] = 1
     
-    # 4) Apply a threshold to the L channel
+    # 3) Apply a threshold to the L channel
     l_binary_output = np.zeros_like(l)
     l_binary_output[(l >= l_thresh[0]) & (l <= l_thresh[1])] = 1
-       
+    
+    # 3) Merge the two binary images
     binary_output = np.zeros_like(s)
     binary_output[(s_binary_output == 1) | (l_binary_output == 1)] = 1
     
     return binary_output
 
-def hsv_select(img, s_thresh=(100, 255), v_thresh=(200, 255), vs_thresh=(180, 255)):
+def hsv_select(img, s_thresh=(100, 255), v_thresh=(200, 255), vs_thresh=(180, 255), clahe = None):
     """Create a thresholded binary image based on s channel and v channel"""
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    if clahe is None:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     
     # 1) Convert to HSV color space
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
     s = hsv[:,:,1]
     v = hsv[:,:,2]
-    
-    
-    # Apply adaptive histogram equalization to remove brightness
+     
+    # 2) Apply adaptive histogram equalization to remove brightness
     v = clahe.apply(v)
     s = clahe.apply(s)
 
-    # 2) Apply a threshold to the V channel
+    # 3) Apply a threshold to the V channel
     v_binary_output = np.zeros_like(v)
     v_binary_output[(v >= v_thresh[0]) & (v <= v_thresh[1])] = 1
 
-    # 2) Apply a threshold to the S channel
+    # 4) Apply a threshold to the S channel
     s_binary_output = np.zeros_like(s)
     s_binary_output[(s >= s_thresh[0]) & (s <= s_thresh[1])] = 1
     
+    # 4) Apply a second threshold to the V channel
     vs_binary_output = np.zeros_like(v)
     vs_binary_output[(v >= vs_thresh[0]) & (v <= vs_thresh[1])] = 1
     
+    # 5) Merge the three binary images
     binary_output = np.zeros_like(s)
     binary_output[((s_binary_output == 1) & (vs_binary_output == 1)) | (v_binary_output == 1)] = 1
     
     return binary_output
 
-def do_canny(image):
-    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-    s = hsv[:,:,1]
-    v = hsv[:,:,2]
-    
-    # Converts frame to grayscale because we only need the luminance channel for detecting edges - less computationally expensive
-    gray = v
-    # Applies a 5x5 gaussian blur with deviation of 0 to frame - not mandatory since Canny will do this for us
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    # Applies Canny edge detector with minVal of 50 and maxVal of 150
-    canny = cv2.Canny(blur, 50, 150)
-    return canny
-
-
+## Finding Lane functions ##
 def find_lane_pixels(binary_warped):
     """
     Find the x and y pixels for the left and right lane lines.
@@ -217,10 +207,8 @@ def find_lane_pixels(binary_warped):
         # (`right` or `leftx_current`) on their mean position 
         if len(good_left_inds) > minpix:
             leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
-            print(leftx_current)
         if len(good_right_inds) > minpix:
             rightx_current = np.int(np.mean(nonzerox[good_right_inds])) 
-            print(rightx_current)
             
         if ((leftx_current - margin ) <= 0) | ((rightx_current + margin)>= binary_warped.shape[1]):
             print("teste")
@@ -289,13 +277,14 @@ def measure_curvature_real(y_eval, left_fit_cr, right_fit_cr):
     right_a = right_fit_cr[0]*(xm_per_pix/ym_per_pix**2)
     right_b = right_fit_cr[1]*(xm_per_pix/ym_per_pix)
     
-    a = ((left_fit_cr[0] + right_fit_cr[0]) / 2)*(xm_per_pix/ym_per_pix**2)
-    b = ((left_fit_cr[1] + right_fit_cr[1]) / 2)*(xm_per_pix/ym_per_pix)
+    #a = ((left_fit_cr[0] + right_fit_cr[0]) / 2)*(xm_per_pix/ym_per_pix**2)
+    #b = ((left_fit_cr[1] + right_fit_cr[1]) / 2)*(xm_per_pix/ym_per_pix)
     
     # Implement the calculation of R_curve (radius of curvature)
-    left_curverad = ((1 + (2*left_a*y_eval*ym_per_pix + left_b)**2)**(3/2))/(np.abs(2*left_a))  ## Implement the calculation of the left line here
-    right_curverad = ((1 + (2*right_a*y_eval*ym_per_pix + right_b)**2)**(3/2))/(np.abs(2*right_a)) ## Implement the calculation of the right line here
+    left_curverad = ((1 + (2*left_a*y_eval*ym_per_pix + left_b)**2)**(3/2))/(np.abs(2*left_a))  
+    right_curverad = ((1 + (2*right_a*y_eval*ym_per_pix + right_b)**2)**(3/2))/(np.abs(2*right_a)) 
     
+    # Average of the left and right curvatures
     radius_curvature = round(np.mean([left_curverad,right_curverad]),0)
     #radius_curvature = ((1 + (2*a*y_eval*ym_per_pix + b)**2)**(3/2))/(np.abs(2*a))
     
@@ -372,32 +361,6 @@ def save_pipeline_image(output_path, image_name, pipeline_result, radius_curvatu
     plt.savefig(os.path.join(output_path, "pipeline_result_" + os.path.basename(image_name))) 
     
     plt.close()
- 
-'''
-def save_warped_images(output_path, image_name, original_image, warped):
-    f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
-    f.tight_layout()
-   
-    ax1.imshow(original_image)
- 
-    ax1.plot([250,1050], [warped.shape[0]-1, warped.shape[0]-1], 'r-')
-    ax1.plot([720,1050], [480, warped.shape[0]-1], 'r-')
-    ax1.plot([605,250], [480, warped.shape[0]-1], 'r-')
-    ax1.plot([605,715], [480, 480], 'r-')
-    ax1.set_title('Undistorted Image with source points', fontsize=30)
-
-    
-    ax2.imshow(warped)
-    ax2.set_title('Warped Image with destination points', fontsize=30)
-    plt.subplots_adjust(left=0.1, right=0.9, top=1, bottom=0, wspace = 0.1)
-    ax2.plot([350,950], [warped.shape[0]-1, warped.shape[0]-1], 'r-')
-    ax2.plot([950,950], [0, warped.shape[0]-1], 'r-')
-    ax2.plot([350,350], [0, warped.shape[0]-1], 'r-')
-    ax2.plot([350,950], [0, 0], 'r-')
-    plt.savefig(os.path.join(output_path, "warped_" + os.path.basename(image_name)))  
-    
-    plt.close()    
-'''
 
 def save_warped_images(output_path, image_name, original_image, warped):
     f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
