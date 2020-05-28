@@ -24,7 +24,7 @@ The goals / steps of this project are the following:
 [image6]: ./output_images/test_images/pipeline_result_straight_lines1.jpg"Output"
 [video1]: ./project_video_output.mp4 "Video"
 [video2]: ./challenge_video_output.mp4 "Challenge Video"
-[video2]: ./harder_challenge_video_output.mp4 "Harder Challenge Video"
+[video3]: ./harder_challenge_video_output.mp4 "Harder Challenge Video"
 
 ## Approach
 
@@ -197,15 +197,31 @@ An example of the pipeline result over a test image is:
 
 ### 3. Build a Lane finding Pipeline for video
 
-Taking into account the Pipeline built on phase 3, two classes `frame` and `line` were defined on files `frame.py` and `line.py`, respectively.
-The class `frame` holds the attributes and methods with respect to each frame of the video. The `__init__` function initializes the variables and `__call__` performs the pipeline, basically the same as the one built on phase 3. The main differences are adding some sanity check to validate and control how the algorithm is performing and apply the `search_around_poly` to each lane when the lanes on previous frame were found and the frame passed on all sanity checks.
+Taking into account the Pipeline built on phase 3, two classes `frame` and `line` were defined on files `frame.py` and `line.py`, respectively. These two classes were built to process each frame of the video at a time.
+A description of each class is presented below:
 
-I slipt the step to find the starting point for the left and right lines needed for the pipeline step `D.Detect lane pixels and fit to find the lane boundary` by definig the function `find_base_lanes_position` to perform that.
+#### Class `frame`
 
+The class `frame` holds the attributes and methods with respect to each frame of the video. The `__init__` function initializes the variables and `__call__` performs the lane finding pipeline, basically the same as the one built on phase 3. 
 
+The main differences are:
+* Sanity check was added to validate and control how the algorithm is performing
+* Add the funtion `search_around_poly` to each lane when the lanes on previous frame were found and the frame passed on all sanity checks. This function is a method of the `line` class.
+* The pipeline step `D.Detect lane pixels and fit to find the lane boundary` was split in two parts. First part try to find the starting point for the left and right lines and the second part is the `line` method `find_base_lanes_position`.
+
+Important to note that two attributes (self.left_line and self.right_line) of this class are an instance of the class `line`. These two attributes are the objects which represent the left and right line.
+
+#### Class `line`
 The class `line` holds the attributes (hyperparameters and some variables to control the status of the lane) and methods with respect to each lane line. 
 
-Here's a [link to my video result](./project_video.mp4)
+The methods of this class performs majority part of the pipeline step `D. Detect lane pixels and fit to find the lane boundary` regarding to each lane line.
+* `find_lane_pixels` finds the x and y pixels for the lane line. It uses sliding windows around a starting point which are passed as argument
+* `update_poly` update the poly line coefficients by appending the polynomial x points to a list "recent_xfitted" and calculate the average x values of the fitted line over the last 'self.n_iteration' iterations.
+* `first_fit_polynomial` fits a polynomial with order "order" for the lane line based on the x,y pixels which fall on sliding windows.
+* `search_around_poly` fits a polynomial with order "order" for the lane line based on the x,y pixels which are around a lane line detected on previous frame.
+        
+
+Here's a [link to my video result](./project_video_output.mp4)
 
 ---
 
@@ -213,10 +229,21 @@ Here's a [link to my video result](./project_video.mp4)
 
 One improvement I did on the pipeline was on function `find_base_lanes_position` defined on file `frame.py` where instead of just consider the peaks of the histogram, I created a list of left and right peaks and then select the peaks each are roughly spaced by "lane width" and are closest to the image center.
 
+I also change the pipeline to handle with lane lines fitted by a polynomial line with order higher than 2.
 
-#### Result of the Lane finding Pipeline for videos
-Here's a [link to my video result](./project_video.mp4)
+
+
+
+#### Result of the Lane finding Pipeline for the challenge videos
+
+Here's a [link to my challenge video result](./challenge_video_output.mp4)
+Here's a [link to my harder challenge video result](./harder_challenge_video_output.mp4)
+
 ### Discussion
+
+
+
+
 
 #### 1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 

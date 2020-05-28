@@ -19,7 +19,7 @@ class Line():
         
         # Image size 
         self.image_height = image_shape[0]
-        self.image_widht = image_shape[1]
+        self.image_width = image_shape[1]
         
         # y values of the line, spaced by 1 pixel
         self.line_y = np.linspace(0, self.image_height-1, self.image_height )
@@ -77,6 +77,8 @@ class Line():
             
         counter_empty_win = 0
         
+        self.line_y = np.linspace(0, self.image_height-1, self.image_height )
+        
         # Step through the windows one by one
         for window in range(self.nwindows):
 
@@ -86,7 +88,7 @@ class Line():
             win_x_low = x_current - self.margin 
             win_x_high = x_current + self.margin 
 
-            # TO DELETE Draw the windows on the visualization image
+            ##  For Visualization - Draw the windows on the visualization image ##
             if out_img is not None:
                 cv2.rectangle(out_img,(win_x_low,win_y_low),
                 (win_x_high,win_y_high),(0,255,0), 2) 
@@ -97,17 +99,23 @@ class Line():
 
             # Append these indices to the lists
             lane_inds.append(good_inds)
-
+            
+            if ((x_current - self.margin ) <= 0) | ((x_current + self.margin)>= self.image_width):
+                #self.line_y = np.linspace(win_y_high, self.image_height-1, (self.image_height-win_y_high) )
+                print("test")
+                break
+            
             # If > minpix pixels, recenter next window on their mean position
             if len(good_inds) > self.minpix:
                 x_current = np.int(np.mean(nonzerox[good_inds]))
                 counter_empty_win = 0
             else:
                 counter_empty_win +=1
-                # if 4 sequence windows has few pixels, this isn't a good image to find the lanes
+                # if 4 sequence windows have few pixels, this isn't a good image to find the lanes
                 if counter_empty_win == 4:
                     self.allx = []
                     self.ally = []
+                    print("failed")
                     return 
 
         # Concatenate the arrays of indices (previously was a list of lists of pixels)
@@ -156,9 +164,8 @@ class Line():
 
         self.best_fit = np.polyfit(self.line_y, self.bestx, order )
         
-        # TO DELETE
+        ##  For Visualization ##
         if out_img is not None:
-            ## Visualization ##
             # Colors in the left and right lane regions
             out_img[self.ally, self.allx] = [255, 0, 0]
 
@@ -178,7 +185,6 @@ class Line():
         if len(self.allx) > 0 and len(self.ally)>0:
             # update the polynomial
             self.update_poly(order, out_img)
-
             self.detected = True
         else:
             self.detected = False
@@ -216,7 +222,7 @@ class Line():
         else:
             self.detected = False
             
-        ##  TO DELETE Visualization ##
+        ##  For Visualization ##
         if out_img is not None:
             # Create an image to draw on and an image to show the selection window
             window_img = np.zeros_like(out_img)
@@ -231,32 +237,3 @@ class Line():
             # Draw the lane onto the warped blank image
             cv2.fillPoly(window_img, np.int_([line_pts]), (0,255, 0))
             out_img = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
-
-
-    def measure_curvature_real(self):
-        '''
-        Calculates the curvature of polynomial functions in meters.
-        '''
-        a = self.best_fit[0]*(xm_per_pix/(ym_per_pix**2))
-        b = self.best_fit[1]*(xm_per_pix/ym_per_pix)
-        y_eval =  np.max(self.line_y)
-
-        # Implement the calculation of R_curve (radius of curvature)
-        self.radius_of_curvature = ((1 + (2*a*y_eval*ym_per_pix + b)**2)**(3/2))/(np.abs(2*a)) 
-
-    
-    def measure_rel_vehicle_position(self):
-        '''
-        Calculates the position of the vehicle relative to the lane line. 
-        Positive value means vehicle is right to the lane line
-        '''
-        y_eval =  np.max(self.line_y)
-        # Calculate x lane position at the bottom of the image.
-        lane_position = (self.best_fit[0]*y_eval**2) + (self.best_fit[1]*y_eval) + self.best_fit[2]
-
-        # Vehicle position
-        vehicle_position = np.int(self.image_widht//2)
-
-        ## Relative position of the vehicle relative to the lane position. If positive, vehicle is right to the lane center
-        self.line_base_pos = xm_per_pix*(vehicle_position - lane_position)
-

@@ -139,7 +139,9 @@ def find_lane_pixels(binary_warped):
     """
     
     # Take a histogram of the bottom half of the image
-    histogram = np.sum(binary_warped[binary_warped.shape[0]//2:,:], axis=0)
+    #histogram = np.sum(binary_warped[binary_warped.shape[0]//2:,:], axis=0)
+    
+    histogram = np.sum(binary_warped[:-binary_warped.shape[0]//10,:], axis=0)
     
     # Create an output image to draw on and visualize the result
     out_img = np.dstack((binary_warped, binary_warped, binary_warped))
@@ -174,6 +176,8 @@ def find_lane_pixels(binary_warped):
     left_lane_inds = []
     right_lane_inds = []
 
+    y_min = 0
+    
     # Step through the windows one by one
     for window in range(nwindows):
 
@@ -212,6 +216,7 @@ def find_lane_pixels(binary_warped):
             
         if ((leftx_current - margin ) <= 0) | ((rightx_current + margin)>= binary_warped.shape[1]):
             print("teste")
+            y_min = win_y_high
             break
 
     # Concatenate the arrays of indices (previously was a list of lists of pixels)
@@ -229,7 +234,7 @@ def find_lane_pixels(binary_warped):
     rightx = nonzerox[right_lane_inds]
     righty = nonzeroy[right_lane_inds]
 
-    return leftx, lefty, rightx, righty, out_img
+    return leftx, lefty, rightx, righty, y_min, out_img
 
 
 def fit_polynomial(binary_warped):
@@ -238,14 +243,14 @@ def fit_polynomial(binary_warped):
     """
     
     # Find our lane pixels first
-    leftx, lefty, rightx, righty, out_img = find_lane_pixels(binary_warped)
+    leftx, lefty, rightx, righty, y_min, out_img = find_lane_pixels(binary_warped)
 
     # Fit a second order polynomial to each using `np.polyfit`
     left_fit = np.polyfit(lefty, leftx, 2 )
     right_fit = np.polyfit(righty, rightx, 2)
 
     # Generate x and y values for plotting
-    ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
+    ploty = np.linspace(y_min, binary_warped.shape[0] -1, binary_warped.shape[0] - y_min  )
     try:
         left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
         right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
@@ -271,22 +276,31 @@ def measure_curvature_real(y_eval, left_fit_cr, right_fit_cr):
     '''
     Calculates the curvature of the lane based on left and right polynomial functions. The curvature is returned in meters.
     '''
-    left_a = left_fit_cr[0]*(xm_per_pix/ym_per_pix**2)
-    left_b = left_fit_cr[1]*(xm_per_pix/ym_per_pix)
     
-    right_a = right_fit_cr[0]*(xm_per_pix/ym_per_pix**2)
-    right_b = right_fit_cr[1]*(xm_per_pix/ym_per_pix)
+    #Convert y point in meter unit
+    y_eval = y_eval*ym_per_pix
     
-    #a = ((left_fit_cr[0] + right_fit_cr[0]) / 2)*(xm_per_pix/ym_per_pix**2)
-    #b = ((left_fit_cr[1] + right_fit_cr[1]) / 2)*(xm_per_pix/ym_per_pix)
+    order = np.max([len(left_fit_cr), len(right_fit_cr)]) - 1
+    left_dy, right_dy = 0, 0
+    left_ddy, right_ddy = 0, 0
     
+    for i in range(order):
+        left_coef = left_fit_cr[i]*(xm_per_pix/ym_per_pix**(order-i))
+        left_dy += ((order-i)*left_coef*(y_eval**(order-i-1)))            
+                    
+        right_coef = right_fit_cr[i]*(xm_per_pix/ym_per_pix**(order-i))
+        right_dy += ((order-i)*right_coef*(y_eval**(order-i-1)))
+        
+        if i < order-1:
+            left_ddy += ((order-i-1)*(order-i)*left_coef*(y_eval**(order-i-2)))            
+            right_ddy += ((order-i-1)*(order-i)*right_coef*(y_eval**(order-i-2)))
+        
     # Implement the calculation of R_curve (radius of curvature)
-    left_curverad = ((1 + (2*left_a*y_eval*ym_per_pix + left_b)**2)**(3/2))/(np.abs(2*left_a))  
-    right_curverad = ((1 + (2*right_a*y_eval*ym_per_pix + right_b)**2)**(3/2))/(np.abs(2*right_a)) 
+    left_curverad = ((1 + (left_dy)**2)**(3/2))/(np.abs(left_ddy))  
+    right_curverad = ((1 + (right_dy)**2)**(3/2))/(np.abs(right_ddy))                  
     
-    # Average of the left and right curvatures
+    # Average the left and right curvatures
     radius_curvature = round(np.mean([left_curverad,right_curverad]),0)
-    #radius_curvature = ((1 + (2*a*y_eval*ym_per_pix + b)**2)**(3/2))/(np.abs(2*a))
     
     return radius_curvature, round(left_curverad,0), round(right_curverad,0)
 
@@ -294,10 +308,13 @@ def measure_rel_vehicle_position(image_shape, left_fit, right_fit):
     '''
     Calculates the position of the vehicle relative to the lane center. Positive value means vehicle is left to the lane center
     '''
-    
+    order = np.max([len(left_fit), len(right_fit)]) - 1
+        
     # Calculate x position of the lanes at the bottom of the image.
-    left_fitx = (left_fit[0]*image_shape[0]**2) + (left_fit[1]*image_shape[0]) + left_fit[2]
-    right_fitx = (right_fit[0]*image_shape[0]**2) + (right_fit[1]*image_shape[0]) + right_fit[2]
+    left_fitx, right_fitx = 0, 0
+    for i in range(order+1):
+        left_fitx += (left_fit[i]*image_shape[0]**(order-i))
+        right_fitx += (right_fit[i]*image_shape[0]**(order-i))
     
     # Vehicle and center lane position
     vehicle_position = np.int(image_shape[1]//2)
