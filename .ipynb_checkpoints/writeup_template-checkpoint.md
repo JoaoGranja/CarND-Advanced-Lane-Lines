@@ -19,9 +19,9 @@ The goals / steps of this project are the following:
 [image1]: ./output_images/camera_calibration/undist_calibration1.png "Undistorted Chessboard Image"
 [image2]: ./output_images/test_images/undistorted_straight_lines1.jpg "Undistorted Image"
 [image3]: ./output_images/test_images/binary_straight_lines1.jpg "Binary Example"
-[image4]: ./output_images/test_images/undistorted_straight_lines1.jpg "Warp Example"
+[image4]: ./output_images/test_images/warped_straight_lines1.jpg "Warp Example"
 [image5]: ./output_images/test_images/lane_lines_straight_lines1.jpg "Fit Visual"
-[image6]: ./output_images/test_images/pipeline_result_straight_lines1.jpg"Output"
+[image6]: ./output_images/test_images/pipeline_result_straight_lines1.jpg "Output"
 [video1]: ./project_video_output.mp4 "Video"
 [video2]: ./challenge_video_output.mp4 "Challenge Video"
 [video3]: ./harder_challenge_video_output.mp4 "Harder Challenge Video"
@@ -237,6 +237,7 @@ I also change the pipeline to handle with lane lines fitted by a polynomial line
 #### Result of the Lane finding Pipeline for the challenge videos
 
 Here's a [link to my challenge video result](./challenge_video_output.mp4)
+
 Here's a [link to my harder challenge video result](./harder_challenge_video_output.mp4)
 
 ### Discussion

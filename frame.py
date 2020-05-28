@@ -29,7 +29,7 @@ class Frame():
         #Save the frame image after 100 iterations 
         self.save = save
         self.count = 0 
-        self.count_max = 100
+        self.count_max = 55
         
         # Two Line instances for each left and right lane line
         self.left_line = Line(img_size)
@@ -63,12 +63,12 @@ class Frame():
 
         # Apply each of the color thresholding functions for HLS color space
         hls_colors_binary = hls_select(undist, s_thresh=(170, 250), l_thresh=(200, 255))
-        hls_colors_binary = hls_select(undist, s_thresh=(170, 250), l_thresh=(255, 255))
+        #hls_colors_binary = hls_select(undist, s_thresh=(170, 250), l_thresh=(255, 255))
 
         # Apply each of the color thresholding functions for HSV color space
-        #hsv_colors_binary = hsv_select(undist, s_thresh=(130, 255), v_thresh=(240, 255), vs_thresh=(200, 255), clahe = self.clahe) 
+        hsv_colors_binary = hsv_select(undist, s_thresh=(130, 255), v_thresh=(240, 255), vs_thresh=(200, 255), clahe = self.clahe) 
         
-        hsv_colors_binary = hsv_select(undist, s_thresh=(130, 255), v_thresh=(255, 255), vs_thresh=(200, 255), clahe = self.clahe) 
+        #hsv_colors_binary = hsv_select(undist, s_thresh=(130, 255), v_thresh=(255, 255), vs_thresh=(200, 255), clahe = self.clahe) 
 
         # Combine all of the thresholding binaries
         binary_image = np.zeros_like(mag_binary)
@@ -113,10 +113,9 @@ class Frame():
              
         ## Sanity Check ##
         # A - Checking that they have similar curvature except when it seems it is a straight line
-        if self.radius_of_curvature < 3000:
-            if not 0.2 <(self.left_line.radius_of_curvature / self.right_line.radius_of_curvature) < 5:
-                print("Fail sanity check - curvature", "left curvature:", self.right_line.radius_of_curvature,  "right curvature:", self.left_line.radius_of_curvature)
-                self.search_starting_points = True
+        if (self.radius_of_curvature < 2000) and (not 0.2 <(self.left_line.radius_of_curvature / self.right_line.radius_of_curvature) < 5):
+            print("Fail sanity check - curvature", "left curvature:", self.right_line.radius_of_curvature,  "right curvature:", self.left_line.radius_of_curvature)
+            self.search_starting_points = True
         
         # B - Checking that they are separated by approximately the right distance horizontally
         distance = (self.right_line.bestx[self.img_size[0]-1] - self.left_line.bestx[self.img_size[0]-1])
@@ -152,8 +151,8 @@ class Frame():
         color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
 
         # Recast the x and y points into usable format for cv2.fillPoly()
-        pts_left = np.array([np.transpose(np.vstack([self.left_line.bestx, self.left_line.line_y]))])
-        pts_right = np.array([np.flipud(np.transpose(np.vstack([self.right_line.bestx, self.right_line.line_y])))])
+        pts_left = np.array([np.transpose(np.vstack([self.left_line.bestx[-len(self.left_line.line_y):], self.left_line.line_y]))])
+        pts_right = np.array([np.flipud(np.transpose(np.vstack([self.right_line.bestx[-len(self.right_line.line_y):], self.right_line.line_y])))])
         pts = np.hstack((pts_left, pts_right))
 
         # Draw the lane onto the warped blank image
@@ -183,6 +182,7 @@ class Frame():
         """
         Find the x starting points for searching the left and right lane lines.
         """
+        margin = 25 
         
         # Take a histogram of the bottom half of the image
         histogram = np.sum(binary_warped[binary_warped.shape[0]//2:,:], axis=0)
@@ -197,30 +197,38 @@ class Frame():
         leftx_list = []
         rightx_list = []        
         leftx_list.append(np.argmax(histogram[:midpoint]))
+        min_left_peak = np.max(histogram[:midpoint])
         rightx_list.append(np.argmax(histogram[midpoint:]) + midpoint)
+        min_right_peak = np.max(histogram[midpoint:])
         
         for i in range(2):
             # Left peaks
-            window_low = leftx_list[i] - 25
+            window_low = leftx_list[len(leftx_list)-1] - margin
             if window_low < 0:
                 window_low = 0
         
-            window_high = leftx_list[i] + 25
+            window_high = leftx_list[len(leftx_list)-1] + margin
             if window_high > midpoint:
                 window_high = midpoint
             histogram[window_low:window_high] = 0
-            leftx_list.append(np.argmax(histogram[:midpoint]))
+            
+            if np.max(histogram[:midpoint]) > 0.5 * min_left_peak:
+                min_left_peak = np.min([min_left_peak, np.max(histogram[:midpoint])])
+                leftx_list.append(np.argmax(histogram[:midpoint]))
             
             # Right peaks
-            window_low = rightx_list[i] - 25
+            window_low = rightx_list[len(rightx_list)-1] - margin
             if window_low < midpoint:
                 window_low = midpoint
         
-            window_high = rightx_list[i] + 25
+            window_high = rightx_list[len(rightx_list)-1] + margin
             if window_high > histogram.shape[0]:
                 window_high = histogram.shape[0]
             histogram[window_low:window_high] = 0
-            rightx_list.append(np.argmax(histogram[midpoint:]) + midpoint)
+            
+            if np.max(histogram[midpoint:]) > 0.5 * min_right_peak:
+                min_right_peak = np.min([min_right_peak, np.max(histogram[midpoint:])])
+                rightx_list.append(np.argmax(histogram[midpoint:]) + midpoint)
             
             
         # Find peaks where distance is similar to horizontal_distance
@@ -228,13 +236,13 @@ class Frame():
         min_distance = np.abs(binary_warped.shape[1]//2 - (rightx_list[0] + leftx_list[0])/2)
         first_time = True
         
-        for i in range(2):
-            for j in range(2):
-                if 0.95*horizontal_distance<rightx_list[j] - leftx_list[i]<1.05*horizontal_distance:    
+        for i in range(len(leftx_list)):
+            for j in range(len(rightx_list)):
+                if 0.8*horizontal_distance<(rightx_list[j] - leftx_list[i])<1.2*horizontal_distance:    
                     if first_time | (np.abs(binary_warped.shape[1]/2 - (rightx_list[j] + leftx_list[i])/2) < min_distance ) :
                         leftx_base, rightx_base = leftx_list[i], rightx_list[j]
                         min_distance = np.abs(binary_warped.shape[1]//2 - (rightx_list[j] + leftx_list[i])/2)
                         first_time = False
-    
+        
         return leftx_base, rightx_base
         
