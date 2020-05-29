@@ -5,11 +5,11 @@ from helper_functions import *
 
 # Define a class to receive the characteristics of each line detection
 class Line():
-    def __init__(self, image_shape):
+    def __init__(self, image_shape, debug = False):
         
         # HYPERPARAMETERS
         # Number of sliding windows
-        self.nwindows = 9
+        self.nwindows = 9 ########################################### 12
         # Width of the windows +/- margin
         self.margin = 50 #100
         # Minimum number of pixels found to recenter window
@@ -55,6 +55,7 @@ class Line():
         self.ally = None  
         
         self.count = 0
+        self.debug = debug
         
         
     def find_lane_pixels(self, binary_warped, base, out_img = None):
@@ -78,8 +79,11 @@ class Line():
         lane_inds = []
             
         counter_empty_win = 0
+        dx_current = []
         
-        self.line_y = np.linspace(0, self.image_height-1, self.image_height )
+        #last_y = binary_warped.shape[0] - window_height
+        
+        #self.line_y = np.linspace(0, self.image_height-1, self.image_height )
         
         # Step through the windows one by one
         for window in range(self.nwindows):
@@ -104,16 +108,22 @@ class Line():
             
             # If > minpix pixels, recenter next window on their mean position
             if len(good_inds) > self.minpix:
-                x_current = np.int(np.mean(nonzerox[good_inds]))
+                new_x_current = np.int(np.mean(nonzerox[good_inds]))
+                dx_current.append(new_x_current - x_current)
+                x_current = new_x_current
+                #last_y = win_y_low
                 counter_empty_win = 0
             else:
+                #if len(dx_current) > 0:
+                #    x_current = x_current + sum(dx_current)/len(dx_current)
+                    
                 counter_empty_win +=1
                 # if 4 sequence windows have few pixels, it is better to stop searching more
                 if counter_empty_win == 4:
-                    self.allx = []
-                    self.ally = []
-                    print("failed")
-                    break
+                    self.allx = [] 
+                    self.ally = [] 
+                    #self.line_y = np.linspace(last_y, self.image_height-1, (self.image_height-win_y_high) )
+                    return
                 
             if ((x_current - self.margin ) <= 0) or ((x_current + self.margin)>= self.image_width):
                 #self.line_y = np.linspace(win_y_high, self.image_height-1, (self.image_height-win_y_high) )
@@ -127,9 +137,14 @@ class Line():
             # Avoids an error if the above is not implemented fully
             pass
 
-        # Extract left and right line pixel positions
-        self.allx = nonzerox[lane_inds]
-        self.ally = nonzeroy[lane_inds] 
+        if counter_empty_win > 5:
+            self.allx = [] 
+            self.ally = [] 
+            print("failed 2")
+        else:        
+            # Extract left and right line pixel positions
+            self.allx = nonzerox[lane_inds]
+            self.ally = nonzeroy[lane_inds] 
 
   
     def update_poly(self, order = 2, out_img = None):
@@ -139,42 +154,43 @@ class Line():
         
         self.count += 1
         
-        # Fit a polynomial to each using `np.polyfit'
-        poly_fit = np.polyfit(self.ally, self.allx, order )
-        
-        # Get the difference in fit coefficients between last and new fits
-        if self.current_fit is not None:
-            self.diffs = poly_fit - self.current_fit 
-            #if np.max(np.abs(self.diffs/poly_fit)) > 10:
-            #    print("Error poly fit", self.diffs/poly_fit )
+        if len(self.allx) > 0 and len(self.ally)>0:
+            # Fit a polynomial to each using `np.polyfit'
+            self.current_fit = np.polyfit(self.ally, self.allx, order )
             
-        self.current_fit = poly_fit
-        
-        # Generate x and y values for plotting  
-        try:
-            x = 0
-            for i in range(order+1):
-                x += self.current_fit[i]*self.line_y**(order-i)
-            if len(self.recent_xfitted) == self.n_iteration:
-                self.recent_xfitted.pop(0)
-            
-            
-            if (len(self.recent_xfitted) > 1):
-                if (len(x) < len(self.recent_xfitted[0])):
+            # Get the difference in fit coefficients between last and new fits
+            if self.best_fit is not None:
+                self.diffs = (self.best_fit - self.current_fit) / self.best_fit 
+
+            # Generate x and y values for plotting  
+            try:
+                x = self.current_fit[order]
+                for i in range(order):
+                    x += self.current_fit[i]*self.line_y**(order-i)
+
+                if len(self.recent_xfitted) == self.n_iteration:
+                    self.recent_xfitted.pop(0)
+
+                if (len(self.recent_xfitted) > 1) and (len(x) < len(self.recent_xfitted[0])):
                     print("teste2", len(x),  len(self.recent_xfitted[0]))
                     x = np.concatenate([np.array([x[0]]*(len(self.recent_xfitted[0]) - len(x))), x])
                     print(len(x), len(self.recent_xfitted[0]))
-                                   
-            self.recent_xfitted.append(x)
-        except TypeError:
-            # Avoids an error
-            print('The function failed to fit a line!')
+
+                self.recent_xfitted.append(x)
+            except TypeError:
+                # Avoids an error
+                print('The function failed to fit a line!')
+                self.detected = False
+
+            # Calculate the average x values of the fitted line over the last 'self.n_iteration' iterations
+            self.bestx = np.mean(self.recent_xfitted, axis = 0)
+
+            self.best_fit = np.polyfit(self.line_y, self.bestx, order )   
+            self.detected = True
+        else:
+            if self.debug:
+                print('No x, y points to fit a line')
             self.detected = False
-
-        # Calculate the average x values of the fitted line over the last 'self.n_iteration' iterations
-        self.bestx = np.mean(self.recent_xfitted, axis = 0)
-
-        self.best_fit = np.polyfit(self.line_y, self.bestx[-len(self.line_y):], order )
         
         ##  For Visualization ##
         if out_img is not None:
@@ -182,7 +198,7 @@ class Line():
             out_img[self.ally, self.allx] = [255, 0, 0]
 
             # Plots the left and right polynomials on the lane lines
-            plt.plot(self.bestx[-len(self.line_y):], self.line_y, color='yellow')
+            plt.plot(self.bestx, self.line_y, color='yellow')
         
     
     def first_fit_polynomial(self, binary_warped, basex, order = 2, out_img = None):
@@ -194,12 +210,7 @@ class Line():
         self.find_lane_pixels(binary_warped, basex, out_img)
 
         # Update the polynomial
-        if len(self.allx) > 0 and len(self.ally)>0:
-            # update the polynomial
-            self.update_poly(order, out_img)
-            self.detected = True
-        else:
-            self.detected = False
+        self.update_poly(order, out_img)
     
     def search_around_poly(self, binary_warped, order, out_img = None):
         """
@@ -226,14 +237,7 @@ class Line():
         self.allx = nonzerox[lane_inds]
         self.ally = nonzeroy[lane_inds] 
         
-        if len(self.allx) > 0 and len(self.ally)>0:
-            # update the polynomial
-            self.update_poly(order, out_img)
-
-            self.detected = True
-        else:
-            print("X,Y are empty")
-            self.detected = False
+        self.update_poly(order, out_img)
             
         ##  For Visualization ##
         if out_img is not None:
@@ -242,8 +246,8 @@ class Line():
 
             # Generate a polygon to illustrate the search window area
             # And recast the x and y points into usable format for cv2.fillPoly()
-            line_window1 = np.array([np.transpose(np.vstack([self.bestx[-len(self.line_y):]-self.margin, self.line_y]))])
-            line_window2 = np.array([np.flipud(np.transpose(np.vstack([self.bestx[-len(self.line_y):]+self.margin, 
+            line_window1 = np.array([np.transpose(np.vstack([self.bestx-self.margin, self.line_y]))])
+            line_window2 = np.array([np.flipud(np.transpose(np.vstack([self.bestx+self.margin, 
                                       self.line_y])))])
             line_pts = np.hstack((line_window1, line_window2))
 

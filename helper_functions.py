@@ -77,14 +77,14 @@ def dir_threshold(image, sobel_kernel=3, thresh=(0, np.pi/2)):
     
     return dir_binary
 
-def hls_select(img, l_thresh=(170, 255), s_thresh=(170, 255)):
+def hls_select(img, s_thresh=(170, 255), l_thresh=(170, 255)):
     """Create a thresholded binary image based on s channel and l channel"""
     
     # 1) Convert to HLS color space
     hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
     l = hls[:,:,1]
     s = hls[:,:,2]
-    
+      
     # 2) Apply a threshold to the S channel
     s_binary_output = np.zeros_like(s)
     s_binary_output[(s >= s_thresh[0]) & (s <= s_thresh[1])] = 1
@@ -139,9 +139,9 @@ def find_lane_pixels(binary_warped):
     """
     
     # Take a histogram of the bottom half of the image
-    #histogram = np.sum(binary_warped[binary_warped.shape[0]//2:,:], axis=0)
+    histogram = np.sum(binary_warped[binary_warped.shape[0]//2:,:], axis=0)
     
-    histogram = np.sum(binary_warped[:-binary_warped.shape[0]//10,:], axis=0)
+    #histogram = np.sum(binary_warped[:-binary_warped.shape[0]//10,:], axis=0)
     
     # Create an output image to draw on and visualize the result
     out_img = np.dstack((binary_warped, binary_warped, binary_warped))
@@ -157,7 +157,7 @@ def find_lane_pixels(binary_warped):
     # Number of sliding windows
     nwindows = 12
     # Width of the windows +/- margin
-    margin = 100
+    margin = 50
     # Minimum number of pixels found to recenter window
     minpix = 50
 
@@ -311,8 +311,8 @@ def measure_rel_vehicle_position(image_shape, left_fit, right_fit):
     order = np.max([len(left_fit), len(right_fit)]) - 1
         
     # Calculate x position of the lanes at the bottom of the image.
-    left_fitx, right_fitx = 0, 0
-    for i in range(order+1):
+    left_fitx, right_fitx = left_fit[order], right_fit[order]
+    for i in range(order):
         left_fitx += (left_fit[i]*image_shape[0]**(order-i))
         right_fitx += (right_fit[i]*image_shape[0]**(order-i))
     
@@ -379,7 +379,7 @@ def save_pipeline_image(output_path, image_name, pipeline_result, radius_curvatu
     
     plt.close()
 
-def save_warped_images(output_path, image_name, original_image, warped):
+def save_warped_images_(output_path, image_name, original_image, warped):
     f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
     f.tight_layout()
    
@@ -403,3 +403,26 @@ def save_warped_images(output_path, image_name, original_image, warped):
     
     plt.close()
     
+def save_warped_images(output_path, image_name, original_image, warped):
+    f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
+    f.tight_layout()
+   
+    ax1.imshow(original_image)
+    
+    ax1.plot([280,1150], [warped.shape[0]-1, warped.shape[0]-1], 'r-')
+    ax1.plot([725,1150], [480, warped.shape[0]-1], 'r-')
+    ax1.plot([600,280], [480, warped.shape[0]-1], 'r-')
+    ax1.plot([600,725], [480, 480], 'r-')
+    ax1.set_title('Undistorted Image with source points', fontsize=30)
+
+    
+    ax2.imshow(warped, cmap='gray')
+    ax2.set_title('Warped Image with destination points', fontsize=30)
+    plt.subplots_adjust(left=0.1, right=0.9, top=1, bottom=0, wspace = 0.1)
+    ax2.plot([350,950], [warped.shape[0]-1, warped.shape[0]-1], 'r-')
+    ax2.plot([950,950], [0, warped.shape[0]-1], 'r-')
+    ax2.plot([350,350], [0, warped.shape[0]-1], 'r-')
+    ax2.plot([350,950], [0, 0], 'r-')
+    plt.savefig(os.path.join(output_path, "warped_" + os.path.basename(image_name)))  
+    
+    plt.close()
