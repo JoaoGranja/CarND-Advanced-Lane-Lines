@@ -9,7 +9,7 @@ class Line():
         
         # HYPERPARAMETERS
         # Number of sliding windows
-        self.nwindows = 9 ########################################### 12
+        self.nwindows = 12 
         # Width of the windows +/- margin
         self.margin = 50 #100
         # Minimum number of pixels found to recenter window
@@ -54,7 +54,6 @@ class Line():
         #y values for detected line pixels
         self.ally = None  
         
-        self.count = 0
         self.debug = debug
         
         
@@ -110,12 +109,12 @@ class Line():
             if len(good_inds) > self.minpix:
                 new_x_current = np.int(np.mean(nonzerox[good_inds]))
                 dx_current.append(new_x_current - x_current)
-                x_current = new_x_current
+                x_current = np.int(new_x_current + sum(dx_current)/len(dx_current))
                 #last_y = win_y_low
                 counter_empty_win = 0
             else:
-                #if len(dx_current) > 0:
-                #    x_current = x_current + sum(dx_current)/len(dx_current)
+                if len(dx_current) > 0:
+                    x_current = np.int(x_current + sum(dx_current)/len(dx_current))
                     
                 counter_empty_win +=1
                 # if 4 sequence windows have few pixels, it is better to stop searching more
@@ -127,7 +126,8 @@ class Line():
                 
             if ((x_current - self.margin ) <= 0) or ((x_current + self.margin)>= self.image_width):
                 #self.line_y = np.linspace(win_y_high, self.image_height-1, (self.image_height-win_y_high) )
-                print("test")
+                if self.debug:
+                    print("The curve crosses the lateral boundaries")
                 break
 
         # Concatenate the arrays of indices (previously was a list of lists of pixels)
@@ -136,23 +136,16 @@ class Line():
         except ValueError:
             # Avoids an error if the above is not implemented fully
             pass
-
-        if counter_empty_win > 5:
-            self.allx = [] 
-            self.ally = [] 
-            print("failed 2")
-        else:        
-            # Extract left and right line pixel positions
-            self.allx = nonzerox[lane_inds]
-            self.ally = nonzeroy[lane_inds] 
+    
+        # Extract left and right line pixel positions
+        self.allx = nonzerox[lane_inds]
+        self.ally = nonzeroy[lane_inds] 
 
   
     def update_poly(self, order = 2, out_img = None):
         """
         Append the polynomial x points to a list "recent_xfitted" and calculate the average x values of the fitted line over the last 'self.n_iteration' iterations. 
         """
-        
-        self.count += 1
         
         if len(self.allx) > 0 and len(self.ally)>0:
             # Fit a polynomial to each using `np.polyfit'
@@ -172,9 +165,9 @@ class Line():
                     self.recent_xfitted.pop(0)
 
                 if (len(self.recent_xfitted) > 1) and (len(x) < len(self.recent_xfitted[0])):
-                    print("teste2", len(x),  len(self.recent_xfitted[0]))
+                    if self.debug:
+                        print("Before concatenating x values", len(x),  len(self.recent_xfitted[0]))
                     x = np.concatenate([np.array([x[0]]*(len(self.recent_xfitted[0]) - len(x))), x])
-                    print(len(x), len(self.recent_xfitted[0]))
 
                 self.recent_xfitted.append(x)
             except TypeError:
@@ -189,7 +182,7 @@ class Line():
             self.detected = True
         else:
             if self.debug:
-                print('No x, y points to fit a line')
+                print('No x, y points fitting the line')
             self.detected = False
         
         ##  For Visualization ##

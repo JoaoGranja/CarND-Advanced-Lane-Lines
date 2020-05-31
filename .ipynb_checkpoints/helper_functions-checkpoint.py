@@ -215,7 +215,7 @@ def find_lane_pixels(binary_warped):
             rightx_current = np.int(np.mean(nonzerox[good_right_inds])) 
             
         if ((leftx_current - margin ) <= 0) | ((rightx_current + margin)>= binary_warped.shape[1]):
-            print("teste")
+            print("The curve crosses the lateral boundaries")
             y_min = win_y_high
             break
 

@@ -1,0 +1,151 @@
+<h2>Writeup</h2>
+<hr>
+<p><strong>Advanced Lane Finding Project</strong></p>
+<p>The goals / steps of this project are the following:</p>
+<ul>
+<li>Compute the camera calibration matrix and distortion coefficients given a set of chessboard images.</li>
+<li>Apply a distortion correction to raw images.</li>
+<li>Use color transforms, gradients, etc., to create a thresholded binary image.</li>
+<li>Apply a perspective transform to rectify binary image ("birds-eye view").</li>
+<li>Detect lane pixels and fit to find the lane boundary.</li>
+<li>Determine the curvature of the lane and vehicle position with respect to center.</li>
+<li>Warp the detected lane boundaries back onto the original image.</li>
+<li>Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position.</li>
+</ul>
+<h2>Approach</h2>
+<p>To accomplish with the project goals, presented above, I divided the project development in the four following phases:</p>
+<p>1 - Camera Calibration. Calculate the camera matrix and distortion coefficients using the chessboard images provided in "camera_cal" folder</p>
+<p>2 - Build a Lane finding Pipeline for a single image</p>
+<p>3 - Build a Lane finding Pipeline for video</p>
+<p>4 - Reinforce the video Pipeline using the provided challenge videos </p>
+<h3>Here I will consider the 4 phases individually and describe how I addressed each phase in my implementation.</h3>
+<hr>
+<h3>1. Camera Calibration</h3>
+<h4>Here is a description of how I computed the camera matrix and distortion coefficients. An example of a distortion corrected calibration image is provided.</h4>
+<p>The code for this step is contained in the third code cell of the IPython notebook located in "main.ipynb".  </p>
+<p>I start by preparing "object points", which will be the (x, y, z) coordinates of the chessboard corners in the image. Here I am assuming the chessboard is fixed on the (x, y) plane at z=0, such that the object points are the same for each calibration image.  Furthermore I am counting (9,6) corners on each image. Thus, <code>objp</code> is just a replicated array of coordinates, and <code>objpoints</code> will be appended with a copy of it every time I successfully detect all chessboard corners in a test image, using the  <code>cv2.findChessboardCorners()</code> function over the gray scale of the test image. <code>imgpoints</code> will be appended with the (x, y) pixel position of each of the corners in the image plane with each successful chessboard detection.  </p>
+<p>After completing the search of the chessboard corners of all test images, I then used the output <code>objpoints</code> and <code>imgpoints</code> to compute the camera calibration and distortion coefficients using the <code>cv2.calibrateCamera()</code> function.  I applied this distortion correction to the test image using the <code>cv2.undistort()</code> function to verify that all process is correct. An example of the result obtained is: </p>
+<p><img alt="alt text" src="./output_images/camera_calibration/undist_calibration1.jpg" title="Undistorted Chessboard Image"></p>
+<p>To avoid running every time this cell, I stored the camera calibration and distortion coefficients into the file <code>camera_coeff.pkl</code> so that next time I just have to load the file.</p>
+<h3>2. Build a Lane finding Pipeline for a single image</h3>
+<p>In this phase, the following steps were performed, first applied to the straight lines images then to the other test images:
+* Read and apply a distortion correction to the image.
+* Use color transforms, gradients, etc., to create a thresholded binary image.
+* Apply a perspective transform to rectify binary image ("birds-eye view").
+* Detect lane pixels and fit to find the lane boundary.
+* Determine the curvature of the lane and vehicle position with respect to center.
+* Warp the detected lane boundaries back onto the original image.
+* Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position.</p>
+<p>The pipeline function calls <code>process_image</code> (6th code cell of the IPython notebook located in "main.ipynb") which was built step by step. Its arguments are:
+* image - the image object (read from`'mpimg.imread') 
+* fname - the image name for saving purposes
+* mtx, dist - camera matrix and distortion coefficients calculated on phase 1
+* M, M_inv - transform matrix M and inverted transform matrix M_inv. These matrixes were first determined on step C but then removed from this pipeline and included here as argument. Now they are calculated on 5th code cell of the IPython notebook located in "main.ipynb".</p>
+<h4>A. Read and apply a distortion correction to the images.</h4>
+<p>On 7th code cell of the IPython notebook located in "main.ipynb", the images variable is a list of test images. Looping through that list, the image is read through the function <code>mpim.imread</code> which provide an image in RGB color channel. Then this image is passed as argument to the function <code>process_image</code>.</p>
+<p>The distortion correction to the images is done by function <code>undistort_image</code> defined on file <code>helper_functions.py</code>. This function uses <code>cv2.undistort</code> to perform the distortion correction using the camera matrix and distortion coefficients passed as argument.</p>
+<p>A result of this step is:</p>
+<p><img alt="alt text" src="./output_images/test_images/undistorted_straight_lines1.jpg" title="Undistorted Image"></p>
+<h4>B. Use color transforms, gradients, etc., to create a thresholded binary image.</h4>
+<p>The approach to this step was to tune separately the threshold values of all binary images using the color transform or gradients and then combine all of them. The functions used on this process are defined on file <code>helper_functions.py</code> (<code>abs_sobel_thresh</code>, <code>mag_thresh</code>, <code>dir_threshold</code>, <code>hls_select</code> and <code>hsv_select</code>) 
+<code>abs_sobel_thresh</code> applies Sobel x or y, takes an absolute value and applies a threshold. 
+<code>mag_thresh</code> applies Sobel x and y, computes the magnitude of the gradient and applies a threshold.
+<code>dir_threshold</code> applies Sobel x and y, computes the direction of the gradient and applies a threshold.
+<code>hls_select</code> converts to HLS color space and separate the S and L channel and applies a threshold to each channel.
+<code>hsv_select</code> converts to HSV color space and separate the S and V channel. For both channels, applies an Adaptive Histogram Equalization using <code>cv2.createCLAHE</code> to increase the contrast of the image. Then for S and V channel applies a threshold. Note that the S channel is used together with a second threshold for V channel. This was necessary to detect yellow lines on channel video frames.</p>
+<p>The final result is a combination of L/S-channel plus S/V-channel binary image plus magnitude and direction gradients. 
+The result of this combination is the binary image called <code>binary_image</code> calculated as:
+<code>binary_image[(hsv_colors_binary == 1) | (hls_colors_binary == 1) | ((mag_binary == 1) &amp; (dir_binary == 1)) ] = 1</code></p>
+<p>The threshold values was defined by trial error over the test images and some video frames.
+Here's an example of my output for this step.  </p>
+<p><img alt="alt text" src="./output_images/test_images/binary_straight_lines1.jpg" title="Binary Example"></p>
+<h4>C. Apply a perspective transform to rectify binary image ("birds-eye view").</h4>
+<p>The code used to obtain the transform matrix M and M_inv needed to perform perspective transform to the image is presented in the 5th code cell of the IPython notebook located in "main.ipynb".  The test image <code>straight_lines1</code> was used to defined the source and destination points. I explored the image using a image editor and after several attempts, I defined the source (<code>src</code>) and destination (<code>dst</code>) points as:</p>
+<p><code>src = np.float32([[195, 720],[1125, 720],[578, 460],[705, 460]])
+dst = np.float32([[350, 720],[950, 720],[350,0],[950,0]])</code></p>
+<p>Withe the source and destination points, I got the transform matrix M using the src and dst points <code>cv2.getPerspectiveTransform(src, dst)</code> and the invert transform matrix M_inv using the function <code>cv2.getPerspectiveTransform(dst, src)</code></p>
+<p>I verified that my perspective transform was working as expected by drawing the <code>src</code> and <code>dst</code> points onto the test image <code>straight_lines1</code> and its warped counterpart to verify that the lines appear parallel in the warped image.</p>
+<p><img alt="alt text" src="./output_images/test_images/warped_straight_lines1.jpg" title="Warp Example"></p>
+<p>On the pipeline, the transform matrix M and M_inv are passed as argument to the function <code>process_image</code> and the perspective transform is done calling the function <code>cv2.warpPerspective</code>.</p>
+<h4>D.Detect lane pixels and fit to find the lane boundary.</h4>
+<p>This step is performed on function <code>fit_polynomial</code> which take as argument the binary_warped image and return 6 objects:
+* out_img - warped image with the polynomial lines for the left and right lanes (yellow) and the x,y points used to fit that polynomial lines (red for left lane and blue for right lane) 
+* left_fit, right_fit - polynomial coefficients for left and right polynomial lines, respectively
+* left_fitx, right_fitx - x points of the left and right polynomial lines, respectively
+* ploty - y points of the left and right polynomial lines (these values are the same for left and right lines)</p>
+<p>The function <code>fit_polynomial</code> is defined on file <code>helper_functions.py</code>.
+The first step is to find the binary image pixels with coordinates (x,y) needed to fit a 2nd order polynomial line. This step is done by the function <code>find_lane_pixels</code> which use the sliding window method and works as follows:</p>
+<ul>
+<li>Take a histogram of the bottom half of the image and find the peak of the left and right halves of the histogram. These will be the starting point for the left and right lines (leftx_base and rightx_base).</li>
+<li>Set up windows and window hyperparameters.</li>
+<li>Calculate the nonzero x and y pixels using the function nonzero().</li>
+<li>Loop through each window and find the boundaries of the current window. This is based on a combination of the current window's starting point (leftx_current and rightx_current), as well as the hyperparameter margin.</li>
+<li>I use cv2.rectangle to draw these window boundaries onto our visualization image called out_img. </li>
+<li>Knowing the boundaries of our window, I find out which activated pixels, on both x and y coordinates, actually fall into the window.</li>
+<li>Append the pixels index to the lists left_lane_inds and right_lane_inds.</li>
+<li>If the number of activated pixels are greater than your hyperparameter minpix, re-center our window (based on the mean position of these pixels).</li>
+<li>In the end of the loop, I extract left and right line pixel positions.</li>
+</ul>
+<p>After getting the left and right line pixel positions, returned from function <code>find_lane_pixels</code>, I fit a second order polynomial to each lane using <code>np.polyfit</code> function and then I generate the x and y values of that polynomial line. For visualization I plot that x and y values of both left and right lanes. These lines are presented at yellow color.</p>
+<p>An example of the result image is:</p>
+<p><img alt="alt text" src="./output_images/test_images/lane_lines_straight_lines1.jpg" title="Fit Visual"></p>
+<h4>E. Determine the curvature of the lane and vehicle position with respect to center.</h4>
+<p>After detecting the left and right lanes and fit a second order polynomial to each, I determine the curvature of the lane in meters unit on function <code>measure_curvature_real</code> defined on file <code>helper_functions.py</code>. In this function, I first convert the polynomial coefficients in pixel units to meter using the conversions defined on <code>helper_functions.py</code>:
+ym_per_pix = 30/720 # meters per pixel in y dimension
+xm_per_pix = 3.7/600 # meters per pixel in x dimension</p>
+<p>Then I apply the following formulas: </p>
+<p>a_m = a_p<em>(xm_per_pix/ym_per_pix</em>*2); 
+b_m = b_p * (xm_per_pix/ym_per_pix)</p>
+<p>After that I calculate the curvature of each lane as:
+R = ((1 + (2<em>a</em>y<em>ym_per_pix + b)</em><em>2)</em><em>(3/2))/(np.abs(2</em>a))</p>
+<p>The curvature of the lane is then defined as an average of the two curvatures.</p>
+<p>The vehicle position with respect to center of the lane is calculated on function <code>measure_rel_vehicle_position</code> defined on file <code>helper_functions.py</code>. In this function, the x position of each lane lines at the bottom of the image are calculated. The center of the lane is calculated as the point in the middle of that two x position points. The vehicle position is defined as being on the middle of the image width. The relative position is then calculated as the difference of that two values. </p>
+<p>The conversion to meter unit is also done using the conversion xm_per_pix.</p>
+<p><strong>Results obtained</strong>:</p>
+<p>For validation, the left and right curvatures are printed for each image as well as the lane curvature and the vehicle position with respect to center.</p>
+<p>The curvature values for the test images were calculated around 1000 m, except for the straight lines were the curvature values can be higher than 1000 m.</p>
+<p>The vehicle position with respect to center for the test images were calculated around 0.04m to 0.41m left of the lane center.</p>
+<h4>F. Warp the detected lane boundaries back onto the original image.</h4>
+<p>With the lane boundaries detected, a binary image is created to draw the lane lines for output display. But first I create the lane lines and then warp back to the original image space. So the next steps are done:
+* Create an image to draw the lines on
+* Recast the x and y points into usable format for <code>cv2.fillPoly</code>
+* Draw the lanes onto the warped blank image
+* Warp the blank back to original image space using inverse perspective matrix (M_inv) passed as argument on the function <code>cv2.warpPerspective</code></p>
+<h4>G. Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position..</h4>
+<p>To display the original image with the lane boundaries and numerical estimation of lane curvature and vehicle position, I combine the unwarped binary image defined on previous step (F) with the original image. This combination is done using the function <code>cv2.addWeighted</code>.</p>
+<p>Moreover I add two texts on function <code>save_pipeline_image</code>. These two text have the information about numerical estimation of the lane curvature and vehicle position.</p>
+<h4>Result of the Lane finding Pipeline</h4>
+<p>This pipeline is defined in the 6th code cell of the IPython notebook located in "main.ipynb"  on function <code>process_image</code>. This function calls several functions to plot and save the resulted image. These results are stored on folder <code>/output_images/test_images</code>. This pipeline is called for all test images on 7th code cell.</p>
+<p>An example of the pipeline result over a test image is:</p>
+<p><img alt="alt text" src="./output_images/test_images/pipeline_result_straight_lines1.jpg" title="Output"></p>
+<hr>
+<h3>3. Build a Lane finding Pipeline for video</h3>
+<p>Taking into account the Pipeline built on phase 3, two classes <code>frame</code> and <code>line</code> were defined on files <code>frame.py</code> and <code>line.py</code>, respectively. These two classes were built to process each frame of the video at a time.
+A description of each class is presented below:</p>
+<h4>Class <code>frame</code></h4>
+<p>The class <code>frame</code> holds the attributes and methods with respect to each frame of the video. The <code>__init__</code> function initializes the variables and <code>__call__</code> performs the lane finding pipeline, basically the same as the one built on phase 3. </p>
+<p>The main differences are:
+* Sanity check was added to validate and control how the algorithm is performing
+* Add the function <code>search_around_poly</code> to each lane when the lanes on previous frame were found and the frame passed on all sanity checks. This function is a method of the <code>line</code> class.
+* The pipeline step <code>D.Detect lane pixels and fit to find the lane boundary</code> was split in two parts. First part try to find the starting point for the left and right lines and the second part is the <code>line</code> method <code>find_base_lanes_position</code>.</p>
+<p>Important to note that two attributes (self.left_line and self.right_line) of this class are an instance of the class <code>line</code>. These two attributes are the objects which represent the left and right line.</p>
+<h4>Class <code>line</code></h4>
+<p>The class <code>line</code> holds the attributes (hyperparameters and some variables to control the status of the lane) and methods with respect to each lane line. </p>
+<p>The methods of this class performs majority part of the pipeline step <code>D. Detect lane pixels and fit to find the lane boundary</code> regarding to each lane line.
+* <code>find_lane_pixels</code> finds the x and y pixels for the lane line. It uses sliding windows around a starting point which are passed as argument
+* <code>update_poly</code> update the poly line coefficients by appending the polynomial x points to a list "recent_xfitted" and calculate the average x values of the fitted line over the last 'self.n_iteration' iterations.
+* <code>first_fit_polynomial</code> fits a polynomial with order "order" for the lane line based on the x,y pixels which fall on sliding windows.
+* <code>search_around_poly</code> fits a polynomial with order "order" for the lane line based on the x,y pixels which are around a lane line detected on previous frame.</p>
+<p>Here's a <a href="./project_video_output.mp4">link to my video result</a></p>
+<hr>
+<h3>4. Reinforce the video Pipeline using the provided challenge videos</h3>
+<p>One improvement I did on the pipeline was on function <code>find_base_lanes_position</code> defined on file <code>frame.py</code>. Instead of just considering the highest peaks of the histogram, I created a list of highest left and right peaks and then selected the peaks each are roughly spaced by "lane width" and are closest to the image center.</p>
+<p>I also changed the pipeline to handle with lane lines fitted by a polynomial line with order higher than 2.</p>
+<p>On <code>find_lane_pixels</code> function of the <code>line</code> class, I avoided images when the nonzero pixels in x and y within the window are fewer than <code>self.minpix</code> in four consecutive windows. In that case I consider the image a bad candidate to fit a lane line. This was important when the algorithm could not detect lines in shadows zone.</p>
+<h4>Result of the Lane finding Pipeline for the challenge videos</h4>
+<p>Here's a <a href="./challenge_video_output.mp4">link to my challenge video result</a></p>
+<p>Here's a <a href="./harder_challenge_video_output.mp4">link to my harder challenge video result</a></p>
+<h3>Discussion</h3>
+<p>The pipeline works pretty well for the first video. After the improvements, the pipeline is not working bad on the first challenge videos. However for the harder challenge video, it is not capable to detect correctly the lanes. It needs to be able to detect strong curve lanes. On that cases, the nonzero pixels in y coordinates, doesn't cover all image height. I tried an upgrade to the algorithm by considering a small fit line but I struggled how to add it to the last n iterations. </p>
+<p>Other improvement for this algorithm could be handle more efficiently with shadow and brightness. Some binary images have noise resulted by that.</p>
+<p>Other improvement could be considering the angle of the camera related to the road as well as its variation. Sometimes the perspective transform applied to the each frame is not so good. </p>

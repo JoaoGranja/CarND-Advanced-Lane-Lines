@@ -9,7 +9,6 @@ ym_per_pix = 30/720 # meters per pixel in y dimension
 xm_per_pix = 3.7/600 # meters per pixel in x dimension
 horizontal_distance = 600 #pixels
 
-# TO DELETE
 out_img = None
 
 # Define a class to process each frame of a video
@@ -30,7 +29,7 @@ class Frame():
         #Save the frame image after self.count_max iterations 
         self.debug = debug
         self.count = 0 
-        self.count_max = 100
+        self.count_max = 10
         
         # Two Line instances for each left and right lane line
         self.left_line = Line(img_size, debug)
@@ -89,7 +88,7 @@ class Frame():
         ## 4 - Detect lane pixels and fit to find the lane boundary ##
 
         # Create a sliding window and find out which activated pixels fall into the window
-        if (self.search_starting_points == True): # | (self.left_line.detected == False) | (self.right_line.detected == False):
+        if (self.search_starting_points == True) or ((self.count % 5) == 0): # | (self.left_line.detected == False) | (self.right_line.detected == False):
             leftx_base, rightx_base = self.find_base_lanes_position(binary_warped)
             
             self.left_line.first_fit_polynomial(binary_warped, leftx_base, self.order_poly, out_img)
@@ -219,7 +218,7 @@ class Frame():
             
             if np.max(histogram[:midpoint]) > 0.5 * min_left_peak:
                 min_left_peak = np.min([min_left_peak, np.max(histogram[:midpoint])])
-            leftx_list.append(np.argmax(histogram[:midpoint]))
+                leftx_list.append(np.argmax(histogram[:midpoint]))
             
             # Right peaks
             window_low = rightx_list[len(rightx_list)-1] - margin
@@ -233,7 +232,7 @@ class Frame():
             
             if np.max(histogram[midpoint:]) > 0.5 * min_right_peak:
                 min_right_peak = np.min([min_right_peak, np.max(histogram[midpoint:])])
-            rightx_list.append(np.argmax(histogram[midpoint:]) + midpoint)
+                rightx_list.append(np.argmax(histogram[midpoint:]) + midpoint)
             
             
         # Find peaks where distance is similar to horizontal_distance

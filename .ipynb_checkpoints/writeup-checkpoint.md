@@ -16,7 +16,7 @@ The goals / steps of this project are the following:
 
 [//]: # (Image References)
 
-[image1]: ./output_images/camera_calibration/undist_calibration1.png "Undistorted Chessboard Image"
+[image1]: ./output_images/camera_calibration/undist_calibration1.jpg "Undistorted Chessboard Image"
 [image2]: ./output_images/test_images/undistorted_straight_lines1.jpg "Undistorted Image"
 [image3]: ./output_images/test_images/binary_straight_lines1.jpg "Binary Example"
 [image4]: ./output_images/test_images/warped_straight_lines1.jpg "Warp Example"
@@ -29,9 +29,13 @@ The goals / steps of this project are the following:
 ## Approach
 
 To accomplish with the project goals, presented above, I divided the project development in the four following phases:
-1 - Camera Calibration. Calculate the camera matrix and distortion coefficients using the chessboard images provided in "camera_cal" folder.
+
+1 - Camera Calibration. Calculate the camera matrix and distortion coefficients using the chessboard images provided in "camera_cal" folder
+
 2 - Build a Lane finding Pipeline for a single image
+
 3 - Build a Lane finding Pipeline for video
+
 4 - Reinforce the video Pipeline using the provided challenge videos 
 
 
@@ -227,11 +231,11 @@ Here's a [link to my video result](./project_video_output.mp4)
 
 ### 4. Reinforce the video Pipeline using the provided challenge videos 
 
-One improvement I did on the pipeline was on function `find_base_lanes_position` defined on file `frame.py` where instead of just consider the peaks of the histogram, I created a list of left and right peaks and then select the peaks each are roughly spaced by "lane width" and are closest to the image center.
+One improvement I did on the pipeline was on function `find_base_lanes_position` defined on file `frame.py`. Instead of just considering the highest peaks of the histogram, I created a list of highest left and right peaks and then selected the peaks each are roughly spaced by "lane width" and are closest to the image center.
 
-I also change the pipeline to handle with lane lines fitted by a polynomial line with order higher than 2.
+I also changed the pipeline to handle with lane lines fitted by a polynomial line with order higher than 2.
 
-I avoid images when the nonzero pixels in x and y within the window are fewer than `self.minpi` in four consecutive windows. In that case I consider that the image is not a good candidate to fit a lane line. This was important when the algorithm can not detect lines in shadows zone.
+On `find_lane_pixels` function of the `line` class, I avoided images when the nonzero pixels in x and y within the window are fewer than `self.minpix` in four consecutive windows. In that case I consider the image a bad candidate to fit a lane line. This was important when the algorithm could not detect lines in shadows zone.
 
 
 
@@ -244,8 +248,8 @@ Here's a [link to my harder challenge video result](./harder_challenge_video_out
 
 ### Discussion
 
-The pipeline works pretty well for the first video. After the improvements, the pipeline is not working badly on the easier challenge videos. However for the harder challenge video, it is not available to detect correctly the lanes. It was necessary to handle correctly the strong curve lanes. On that cases, the nonzero pixels in y coordinates, doesn't cover all image height. I tried un upgrade to the algorithm by considering a small fit line but I struggled how to add it to the last n iterations. 
+The pipeline works pretty well for the first video. After the improvements, the pipeline is not working bad on the first challenge videos. However for the harder challenge video, it is not capable to detect correctly the lanes. It needs to be able to detect strong curve lanes. On that cases, the nonzero pixels in y coordinates, doesn't cover all image height. I tried an upgrade to the algorithm by considering a small fit line but I struggled how to add it to the last n iterations. 
 
-Other improvement for this algorithm is to better handle with shadow and brightness zone. Some binary images have noise resulted by that.
+Other improvement for this algorithm could be handle more efficiently with shadow and brightness. Some binary images have noise resulted by that.
 
 Other improvement could be considering the angle of the camera related to the road as well as its variation. Sometimes the perspective transform applied to the each frame is not so good. 
